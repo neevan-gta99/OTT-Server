@@ -11,7 +11,7 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({              
-  origin: ['http://localhost:5174', "https://ott-client-coral.vercel.app/"],
+  origin: ['http://localhost:5174', "https://ott-client-coral.vercel.app"],
   credentials: true
 }));
 
