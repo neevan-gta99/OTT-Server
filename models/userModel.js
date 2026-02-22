@@ -5,11 +5,11 @@ import dotenv from 'dotenv';
 import { redisClient } from "../server.js";
 import { razorpay } from "../razorpay/buyCoins.js";
 import crypto from 'crypto';
-import DB_writes from "../utils/dbWrites.js";
 import orderDTO from "../schemas/orderSchema.js";
 import transactionDTO from "../schemas/transactionSchema.js";
 import verifyPaymentDTO from "../schemas/verifyPaymentSchema.js";
 import VideoTransactionDTO from "../schemas/videoTransactionSchema.js";
+import razor_pay from "../utils/razorPay.js";
 
 dotenv.config();
 
@@ -226,7 +226,7 @@ const buyVideo = async (req) => {
     const videoId = req.params.id;
 
 
-    console.log("Video Id:=>" , videoId);
+    console.log("Video Id:=>", videoId);
     try {
 
         const exists = await redisClient.exists(`savedUsers:${userName}`);
@@ -293,7 +293,7 @@ const buyVideo = async (req) => {
             return { code: 500, allowed: false };
         }
 
-       await VideoTransactionDTO.create({
+        await VideoTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
@@ -305,7 +305,7 @@ const buyVideo = async (req) => {
 
     } catch (err) {
         console.error("Buy Failed =>", err);
-         await VideoTransactionDTO.create({
+        await VideoTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
@@ -394,7 +394,15 @@ const verifyPayment = async (req, res) => {
 
         console.log("Verifying payment for:", { username, razorpay_order_id });
 
-        // Generate expected signature
+
+        const paymentDetails = await razor_pay.fetchPaymentFromRazorpay(razorpay_payment_id);
+
+        console.log("Details=>",paymentDetails);
+        
+
+        let paymentMethodData = paymentDetails.method
+
+
         const body = razorpay_order_id + '|' + razorpay_payment_id;
         const expectedSignature = crypto
             .createHmac('sha256', process.env.RAZORPAY_SECRET)
@@ -427,6 +435,7 @@ const verifyPayment = async (req, res) => {
                 paymentId: razorpay_payment_id,
                 signature: razorpay_signature,
                 status: 'failed',
+                paymentMethod: null,
                 failureReason: 'Invalid signature',
                 failureDetails: {
                     expected: expectedSignature,
@@ -472,6 +481,7 @@ const verifyPayment = async (req, res) => {
             paymentId: razorpay_payment_id,
             signature: razorpay_signature,
             status: 'verified',
+            paymentMethod: paymentMethodData,
             verifiedAt: new Date(),
             requestData: req.body,
             responseData: {
@@ -506,6 +516,7 @@ const verifyPayment = async (req, res) => {
             paymentId: razorpay_payment_id,
             signature: razorpay_signature,
             status: 'failed',
+            paymentMethod: null,
             failureReason: `Payment Verification Failed Reason - ${err}`,
             failureDetails: {
                 expected: expectedSignature,

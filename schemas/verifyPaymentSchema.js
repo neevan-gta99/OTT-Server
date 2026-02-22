@@ -5,9 +5,14 @@ const verifyPaymentInfo = new mongoose.Schema({
   orderId: { type: String, required: true, ref: 'Order' },
   paymentId: { type: String },
   signature: { type: String },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: ['verified', 'failed']
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['card', 'upi', 'wallet', 'netbanking'],
+    required: false
   },
   attemptCount: { type: Number, default: 1 },
   failureReason: { type: String },
