@@ -218,6 +218,196 @@ const getTransactionsData = async (req) => {
     }
 };
 
+const getMoreCoins = async (req, res) => {
+    try {
+        const { username, offset, limit = 3 } = req.body;
+
+        if (!username) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username is required'
+            });
+        }
+
+        console.log(`Fetching more coins for ${username} with offset: ${offset}`);
+
+        const coinsRedisKey = `coinsTransactions:${username}`;
+
+        const coinsExists = await redisClient.exists(coinsRedisKey);
+
+        if (!coinsExists) {
+            return res.status(404).json({
+                success: false,
+                message: 'No transactions found in cache'
+            });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(today);
+        endDate.setDate(today.getDate() - (offset * limit) + 1);
+
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - limit);
+
+        console.log(`📅 Coins Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
+
+        const startTimestamp = startDate.getTime();
+        const endTimestamp = endDate.getTime();
+
+        const coinTxnKeys = await redisClient.zRangeByScore(
+            coinsRedisKey,
+            startTimestamp,
+            endTimestamp - 1,
+            { REV: true }
+        );
+
+        const coinsTransactions = [];
+        for (const key of coinTxnKeys) {
+            const data = await redisClient.hGetAll(key);
+            coinsTransactions.push({
+                orderId: data.orderId,
+                paymentId: data.paymentId,
+                paymentMethod: data.paymentMethod,
+                coins: parseInt(data.coins),
+                status: data.status,
+                description: data.description,
+                time: data.time
+            });
+        }
+
+        const nextEndDate = new Date(today);
+        nextEndDate.setDate(today.getDate() - ((offset + 1) * limit) + 1);
+
+        const nextStartDate = new Date(nextEndDate);
+        nextStartDate.setDate(nextEndDate.getDate() - limit);
+
+        console.log(`📅 Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
+
+        const hasMoreCoins = await redisClient.zCount(
+            coinsRedisKey,
+            nextStartDate.getTime(),
+            nextEndDate.getTime() - 1
+        );
+
+        const finalHasMore = hasMoreCoins > 0;
+
+        console.log(`Found ${coinsTransactions.length} more coins. Has more: ${finalHasMore}`);
+
+        return res.status(200).json({
+            success: true,
+            coinsTransactions,
+            pagination: {
+                hasMore: finalHasMore,
+                nextOffset: finalHasMore ? offset + 1 : null
+            }
+        });
+
+    } catch (err) {
+        console.error("❌ Error in getMoreCoins:", err);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch more coins',
+            error: err.message
+        });
+    }
+};
+
+const getMoreVideos = async (req, res) => {
+    try {
+        const { username, offset, limit = 3 } = req.body;
+
+        if (!username) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username is required'
+            });
+        }
+
+        console.log(`Fetching more videos for ${username} with offset: ${offset}`);
+
+        const videosRedisKey = `videosTransactions:${username}`;
+
+        const videosExists = await redisClient.exists(videosRedisKey);
+
+        if (!videosExists) {
+            return res.status(404).json({
+                success: false,
+                message: 'No video transactions found in cache'
+            });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(today);
+        endDate.setDate(today.getDate() - (offset * limit) + 1);
+
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - limit);
+
+        console.log(`📅 Videos Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
+
+        const startTimestamp = startDate.getTime();
+        const endTimestamp = endDate.getTime();
+
+        const videoTxnKeys = await redisClient.zRangeByScore(
+            videosRedisKey,
+            startTimestamp,
+            endTimestamp - 1,
+            { REV: true }
+        );
+
+        const videoTransactions = [];
+        for (const key of videoTxnKeys) {
+            const data = await redisClient.hGetAll(key);
+            videoTransactions.push({
+                coins: parseInt(data.coins),
+                status: data.status,
+                videoTitle: data.videoTitle,
+                videoId: data.videoId,
+                time: data.time
+            });
+        }
+
+        const nextEndDate = new Date(today);
+        nextEndDate.setDate(today.getDate() - ((offset + 1) * limit) + 1);
+
+        const nextStartDate = new Date(nextEndDate);
+        nextStartDate.setDate(nextEndDate.getDate() - limit);
+
+        console.log(`Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
+
+        const hasMoreVideos = await redisClient.zCount(
+            videosRedisKey,
+            nextStartDate.getTime(),
+            nextEndDate.getTime() - 1
+        );
+
+        const finalHasMore = hasMoreVideos > 0;
+
+        console.log(`Found ${videoTransactions.length} more videos. Has more: ${finalHasMore}`);
+
+        return res.status(200).json({
+            success: true,
+            videoTransactions,
+            pagination: {
+                hasMore: finalHasMore,
+                nextOffset: finalHasMore ? offset + 1 : null
+            }
+        });
+
+    } catch (err) {
+        console.error("❌ Error in getMoreVideos:", err);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch more videos',
+            error: err.message
+        });
+    }
+};
+
 const signUpUser = async (req, res) => {
 
     const data = req.body;
@@ -394,20 +584,16 @@ const videoAccess = async (req) => {
 }
 
 const buyVideo = async (req) => {
-
-
     const { vidcoins, vidhead } = req.body;
     const userName = req.user.userName;
     const videoId = req.params.id;
 
-
     console.log("Video Id:=>", videoId);
-    try {
 
+    try {
         const exists = await redisClient.exists(`savedUsers:${userName}`);
 
         if (!exists) {
-
             const found_User = await userDTO.findOne({ userName });
 
             if (found_User.coins < vidcoins) {
@@ -432,12 +618,8 @@ const buyVideo = async (req) => {
             await redisClient.set(`savedUsers:${userName}`, JSON.stringify(updatedUser),
                 { EX: 1800 }
             );
-
-        }
-        else {
-
+        } else {
             let rawData = await redisClient.get(`savedUsers:${userName}`);
-
             let parsedData = JSON.parse(rawData);
 
             if (parsedData.coins < vidcoins) {
@@ -458,17 +640,14 @@ const buyVideo = async (req) => {
                 },
                 { new: true }
             );
-
         }
 
-
         const videoIdUpdate = await redisClient.sAdd(`redisAccessibleIds:${userName}`, videoId);
-
         if (!videoIdUpdate) {
             return { code: 500, allowed: false };
         }
 
-        await VideocoinsTransactionDTO.create({
+        const newTransaction = await VideocoinsTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
@@ -476,17 +655,45 @@ const buyVideo = async (req) => {
             status: 'success'
         });
 
+        const videosRedisKey = `videosTransactions:${userName}`;
+        const txnKey = `video:${newTransaction._id}`;
+        const timestamp = new Date(newTransaction.createdAt).getTime();
+
+        const pipeline = redisClient.multi();
+
+        pipeline.hSet(txnKey, {
+            type: 'video',
+            coins: newTransaction.coins,
+            status: newTransaction.status,
+            videoTitle: newTransaction.videoTitle || '',
+            videoId: newTransaction.videoId || '',
+            time: newTransaction.createdAt.toISOString()
+        });
+
+        pipeline.zAdd(videosRedisKey, {
+            score: timestamp,
+            value: txnKey
+        });
+
+        await pipeline.exec();
+
+        console.log(`Video transaction added to Redis: ${vidhead} for ${vidcoins} coins`);
+
         return { code: 200, allowed: true };
 
     } catch (err) {
         console.error("Buy Failed =>", err);
-        await VideocoinsTransactionDTO.create({
+
+        const failedTransaction = await VideocoinsTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
             videoTitle: vidhead,
             status: 'failed'
         });
+
+        console.log(`Video transaction failed: ${vidhead}`);
+
         return { code: 500, message: "Buy Failed => ", err };
     }
 };
@@ -559,7 +766,6 @@ const createBuyOrderId = async (req, res) => {
 
 const verifyPayment = async (req, res) => {
     try {
-
         const {
             username,
             razorpay_payment_id,
@@ -569,14 +775,10 @@ const verifyPayment = async (req, res) => {
 
         console.log("Verifying payment for:", { username, razorpay_order_id });
 
-
         const paymentDetails = await razor_pay.fetchPaymentFromRazorpay(razorpay_payment_id);
-
         console.log("Details=>", paymentDetails);
 
-
-        let paymentMethodData = paymentDetails.method
-
+        let paymentMethodData = paymentDetails.method;
 
         const body = razorpay_order_id + '|' + razorpay_payment_id;
         const expectedSignature = crypto
@@ -600,11 +802,10 @@ const verifyPayment = async (req, res) => {
             };
         }
 
-        // Check signature
         const isValid = expectedSignature === razorpay_signature;
 
         if (!isValid) {
-
+            // FAILED CASE - Sirf DB mein entry
             await verifyPaymentDTO.create({
                 orderId: razorpay_order_id,
                 paymentId: razorpay_payment_id,
@@ -634,16 +835,14 @@ const verifyPayment = async (req, res) => {
                 status: 'failed'
             });
 
-
             return {
                 code: 400,
                 success: false,
-                message: 'Invalid payment signature', err,
+                message: 'Invalid payment signature',
             };
-
         }
 
-        await coinsTransactionDTO.create({
+        const newTransaction = await coinsTransactionDTO.create({
             userName: username,
             coins: order.coins,
             description: `Purchased ${order.coins} coins`,
@@ -671,10 +870,33 @@ const verifyPayment = async (req, res) => {
         user.coins += order.coins;
         await user.save();
 
+        await redisClient.set(`savedUsers:${username}`, JSON.stringify(user), { EX: 1800 });
 
-        await redisClient.set(`savedUsers:${username}`, JSON.stringify(user),
-            { EX: 1800 }
-        );
+        const coinsRedisKey = `coinsTransactions:${username}`;
+        const txnKey = `coin:${newTransaction._id}`;
+        const timestamp = new Date(newTransaction.createdAt).getTime();
+
+        const pipeline = redisClient.multi();
+
+        pipeline.hSet(txnKey, {
+            type: 'coin',
+            orderId: newTransaction.orderId || '',
+            paymentId: newTransaction.paymentId || '',
+            paymentMethod: newTransaction.paymentMethod || 'unknown',
+            coins: newTransaction.coins,
+            status: newTransaction.status,
+            description: newTransaction.description || '',
+            time: newTransaction.createdAt.toISOString()
+        });
+
+        pipeline.zAdd(coinsRedisKey, {
+            score: timestamp,
+            value: txnKey
+        });
+
+        await pipeline.exec();
+
+        console.log(`New transaction added to Redis: ${newTransaction.coins} coins`);
 
         return {
             code: 200,
@@ -682,8 +904,6 @@ const verifyPayment = async (req, res) => {
             message: 'Payment verified successfully',
             coins: user.coins
         };
-
-
 
     } catch (err) {
         console.error('Verify payment error:', err);
@@ -709,7 +929,7 @@ const verifyPayment = async (req, res) => {
 
         await coinsTransactionDTO.create({
             userName: username,
-            coins: order.coins,
+            coins: order?.coins || 0,
             description: `Transaction failed - Reason - ${err}`,
             orderId: razorpay_order_id,
             paymentId: razorpay_payment_id,
@@ -720,11 +940,12 @@ const verifyPayment = async (req, res) => {
         return {
             code: 500,
             success: false,
-            message: 'Failed to verify payment=>', err,
+            message: 'Failed to verify payment',
+            error: err.message
         };
     }
 };
 
 
-const user_model = { getAllDataOfUser, signUpUser, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData };
+const user_model = { getAllDataOfUser, signUpUser, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData, getMoreCoins, getMoreVideos };
 export default user_model;

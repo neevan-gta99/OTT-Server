@@ -122,9 +122,53 @@ const getTransactionsData = async (req, res) => {
   }
 };
 
+const getCoinsTransaction = async (req, res) => {
+  try {
+    const userRes = await user_model.getMoreCoins(req, res);
+
+    return res.status(userRes.code).json({
+      success: userRes.success,
+      coinsTransactions: userRes.coinsTransactions,
+      pagination: {
+        hasMore: userRes.pagination?.coins?.hasMore ?? false,
+        nextOffset: userRes.pagination?.coins?.nextOffset ?? null
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Error in fetching transaction",
+      details: err.message
+    });
+  }
+};
+
+
+const getVideosTransaction = async (req, res) => {
+  try {
+    const userRes = await user_model.getMoreVideos(req, res);
+
+    return res.status(userRes.code).json({
+      success: userRes.success,
+      coinsTransactions: userRes.coinsTransactions,
+      pagination: {
+        hasMore: userRes.pagination?.coins?.hasMore ?? false,
+        nextOffset: userRes.pagination?.coins?.nextOffset ?? null
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Error in fetching transaction",
+      details: err.message
+    });
+  }
+};
 
 
 
-const user_controller = { getAllDataOfUser, userSignup, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData };
+const user_controller = { getAllDataOfUser, userSignup, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData, getCoinsTransaction, getVideosTransaction };
 
 export default user_controller;

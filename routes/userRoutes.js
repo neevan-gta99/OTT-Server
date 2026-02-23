@@ -21,6 +21,8 @@ router.post('/buy-video/:id', auth_middleware.validUser, user_controller.buyVide
 router.post('/create-order', auth_middleware.validUser, user_controller.createBuyOrderId);
 router.post('/verify-payment', auth_middleware.validUser, user_controller.verifyPayment);
 router.post('/transactions-data', auth_middleware.validUser, user_controller.getTransactionsData);
+router.post('/get-more-coins', auth_middleware.validUser, user_controller.getCoinsTransaction);
+router.post('/get-more-videos', auth_middleware.validUser, user_controller.getVideosTransaction);
 
 
 
