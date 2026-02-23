@@ -102,11 +102,29 @@ const verifyPayment = async (req, res) => {
 }
 
 
+const getTransactionsData = async (req, res) => {
+  try {
+    const userRes = await user_model.getTransactionsData(req, res);
+
+    res.status(userRes.code).json({
+      success: true,
+      coinsTransactions: userRes.coinsTransactions,
+      videoTransactions: userRes.videoTransactions,
+      pagination: userRes.pagination
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Error in fetching transaction",
+      details: err.message
+    });
+  }
+};
 
 
 
 
-
-const user_controller = { getAllDataOfUser, userSignup, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment };
+const user_controller = { getAllDataOfUser, userSignup, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData };
 
 export default user_controller;

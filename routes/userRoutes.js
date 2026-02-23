@@ -20,6 +20,7 @@ router.get('/video-access/:id', auth_middleware.validUser, user_controller.video
 router.post('/buy-video/:id', auth_middleware.validUser, user_controller.buyVideo);
 router.post('/create-order', auth_middleware.validUser, user_controller.createBuyOrderId);
 router.post('/verify-payment', auth_middleware.validUser, user_controller.verifyPayment);
+router.post('/transactions-data', auth_middleware.validUser, user_controller.getTransactionsData);
 
 
 

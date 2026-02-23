@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const videoTransaction = new mongoose.Schema({
+const videoTransactionInfo = new mongoose.Schema({
   userName: { type: String, required: true },
   coins: { type: Number, required: true },
   status: { type: String, enum: ['success', 'failed'], required: true },
@@ -10,6 +10,6 @@ const videoTransaction = new mongoose.Schema({
   timestamps: true
 });
 
-const VideoTransactionDTO = mongoose.models.VideoTransaction || mongoose.model('VideoTransaction', videoTransaction);
+const VideoTransactionDTO = mongoose.models.VideoTransaction || mongoose.model('VideoTransaction', videoTransactionInfo);
 
 export default VideoTransactionDTO;

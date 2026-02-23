@@ -6,9 +6,9 @@ import { redisClient } from "../server.js";
 import { razorpay } from "../razorpay/buyCoins.js";
 import crypto from 'crypto';
 import orderDTO from "../schemas/orderSchema.js";
-import transactionDTO from "../schemas/transactionSchema.js";
+import coinsTransactionDTO from "../schemas/coinsTransactionSchema.js";
 import verifyPaymentDTO from "../schemas/verifyPaymentSchema.js";
-import VideoTransactionDTO from "../schemas/videoTransactionSchema.js";
+import VideocoinsTransactionDTO from "../schemas/videoTransactionSchema.js";
 import razor_pay from "../utils/razorPay.js";
 
 dotenv.config();
@@ -42,6 +42,181 @@ const getAllDataOfUser = async (req) => {
     }
 
 }
+
+const getTransactionsData = async (req) => {
+    const { username, offset = 0, limit = 3 } = req.body;
+
+    try {
+        const coinsRedisKey = `coinsTransactions:${username}`;
+        const videosRedisKey = `videosTransactions:${username}`;
+
+        const coinsExists = await redisClient.exists(coinsRedisKey);
+        const videosExists = await redisClient.exists(videosRedisKey);
+
+        if (!coinsExists || !videosExists) {
+
+            // Dono collections fetch karo
+            const [coinTransactions, videoTransactions] = await Promise.all([
+                coinsTransactionDTO.find({ userName: username }).sort({ createdAt: -1 }).lean(),
+                VideocoinsTransactionDTO.find({ userName: username }).sort({ createdAt: -1 }).lean()
+            ]);
+
+            const coinsPipeline = redisClient.multi();
+            const videosPipeline = redisClient.multi();
+
+            // Store coin transactions in coinsRedisKey
+            for (const txn of coinTransactions) {
+                const txnKey = `coin:${txn._id}`;
+                const timestamp = new Date(txn.createdAt).getTime();
+
+                coinsPipeline.hSet(txnKey, {
+                    type: 'coin',
+                    orderId: txn.orderId || '',
+                    paymentId: txn.paymentId || '',
+                    paymentMethod: txn.paymentMethod || 'unknown',
+                    coins: txn.coins,
+                    status: txn.status,
+                    description: txn.description || '',
+                    time: txn.createdAt.toISOString()
+                });
+
+                coinsPipeline.zAdd(coinsRedisKey, { score: timestamp, value: txnKey });
+            }
+
+            // Store video transactions in videosRedisKey
+            for (const txn of videoTransactions) {
+                const txnKey = `video:${txn._id}`;
+                const timestamp = new Date(txn.createdAt).getTime();
+
+                videosPipeline.hSet(txnKey, {
+                    type: 'video',
+                    coins: txn.coins,
+                    status: txn.status,
+                    videoTitle: txn.videoTitle || '',
+                    videoId: txn.videoId || '',
+                    time: txn.createdAt.toISOString()
+                });
+
+                videosPipeline.zAdd(videosRedisKey, { score: timestamp, value: txnKey });
+            }
+
+            // Execute both pipelines
+            await Promise.all([
+                coinsPipeline.exec(),
+                videosPipeline.exec()
+            ]);
+
+            console.log(`✅ Redis updated with ${coinTransactions.length} coin + ${videoTransactions.length} video transactions`);
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(today);
+        if (offset === 0) {
+            endDate.setDate(today.getDate() + 1);
+        } else {
+            endDate.setDate(today.getDate() - (offset * limit) + 1);
+        }
+
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - limit);
+
+        const startTimestamp = startDate.getTime();
+        const endTimestamp = endDate.getTime();
+
+        const [coinTxnKeys, videoTxnKeys] = await Promise.all([
+            redisClient.zRangeByScore(coinsRedisKey, startTimestamp, endTimestamp - 1, { REV: true }),
+            redisClient.zRangeByScore(videosRedisKey, startTimestamp, endTimestamp - 1, { REV: true })
+        ]);
+
+        const coinsTransactions = [];
+        for (const key of coinTxnKeys) {
+            const data = await redisClient.hGetAll(key);
+            coinsTransactions.push({
+                orderId: data.orderId,
+                paymentId: data.paymentId,
+                paymentMethod: data.paymentMethod,
+                coins: parseInt(data.coins),
+                status: data.status,
+                description: data.description,
+                time: data.time
+            });
+        }
+
+        // Fetch video transactions data
+        const videoTransactions = [];
+        for (const key of videoTxnKeys) {
+            const data = await redisClient.hGetAll(key);
+            videoTransactions.push({
+                coins: parseInt(data.coins),
+                status: data.status,
+                videoTitle: data.videoTitle,
+                videoId: data.videoId,
+                time: data.time
+            });
+        }
+
+
+        const [totalCoins, totalVideos] = await Promise.all([
+            redisClient.zCard(coinsRedisKey),
+            redisClient.zCard(videosRedisKey)
+        ]);
+
+        // ✅ Check if more data exists for each type
+        const nextEndDate = new Date(today);
+        nextEndDate.setDate(today.getDate() - ((offset + 1) * limit) + 1);
+
+        const nextStartDate = new Date(nextEndDate);
+        nextStartDate.setDate(nextEndDate.getDate() - limit);
+
+        console.log(`📅 Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
+
+        // ✅ Check if any transaction exists in next range
+        const [hasMoreCoins, hasMoreVideos] = await Promise.all([
+            // Count how many in next range
+            redisClient.zCount(coinsRedisKey, nextStartDate.getTime(), nextEndDate.getTime() - 1),
+            redisClient.zCount(videosRedisKey, nextStartDate.getTime(), nextEndDate.getTime() - 1)
+        ]);
+
+        // Agar count > 0 means data exists
+        const finalHasMoreCoins = hasMoreCoins > 0;
+        const finalHasMoreVideos = hasMoreVideos > 0;
+
+
+        return {
+            code: 200,
+            coinsTransactions,
+            videoTransactions,
+            pagination: {
+                currentOffset: offset,
+                limit,
+                coins: {
+                    hasMore: finalHasMoreCoins,
+                    isLastBatch: !finalHasMoreCoins,
+                    totalInRange: coinTxnKeys.length,
+                    totalOverall: totalCoins,
+                    nextOffset: finalHasMoreCoins ? offset + 1 : null
+                },
+                videos: {
+                    hasMore: finalHasMoreVideos,
+                    isLastBatch: !finalHasMoreVideos,
+                    totalInRange: videoTxnKeys.length,
+                    totalOverall: totalVideos,
+                    nextOffset: finalHasMoreVideos ? offset + 1 : null
+                }
+            }
+        };
+
+    } catch (err) {
+        console.error("❌ Get Data Failed:", err);
+        return {
+            code: 500,
+            success: false,
+            message: "Get Data Failed"
+        };
+    }
+};
 
 const signUpUser = async (req, res) => {
 
@@ -293,7 +468,7 @@ const buyVideo = async (req) => {
             return { code: 500, allowed: false };
         }
 
-        await VideoTransactionDTO.create({
+        await VideocoinsTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
@@ -305,7 +480,7 @@ const buyVideo = async (req) => {
 
     } catch (err) {
         console.error("Buy Failed =>", err);
-        await VideoTransactionDTO.create({
+        await VideocoinsTransactionDTO.create({
             userName: userName,
             coins: vidcoins,
             videoId: videoId,
@@ -397,8 +572,8 @@ const verifyPayment = async (req, res) => {
 
         const paymentDetails = await razor_pay.fetchPaymentFromRazorpay(razorpay_payment_id);
 
-        console.log("Details=>",paymentDetails);
-        
+        console.log("Details=>", paymentDetails);
+
 
         let paymentMethodData = paymentDetails.method
 
@@ -449,12 +624,13 @@ const verifyPayment = async (req, res) => {
                 }
             });
 
-            await transactionDTO.create({
+            await coinsTransactionDTO.create({
                 userName: username,
                 coins: order.coins,
                 description: 'Payment failed - invalid signature',
                 orderId: razorpay_order_id,
                 paymentId: razorpay_payment_id,
+                paymentMethod: null,
                 status: 'failed'
             });
 
@@ -467,12 +643,13 @@ const verifyPayment = async (req, res) => {
 
         }
 
-        await transactionDTO.create({
+        await coinsTransactionDTO.create({
             userName: username,
             coins: order.coins,
             description: `Purchased ${order.coins} coins`,
             orderId: razorpay_order_id,
             paymentId: razorpay_payment_id,
+            paymentMethod: paymentMethodData,
             status: 'success'
         });
 
@@ -530,12 +707,13 @@ const verifyPayment = async (req, res) => {
             }
         });
 
-        await transactionDTO.create({
+        await coinsTransactionDTO.create({
             userName: username,
             coins: order.coins,
             description: `Transaction failed - Reason - ${err}`,
             orderId: razorpay_order_id,
             paymentId: razorpay_payment_id,
+            paymentMethod: null,
             status: 'failed'
         });
 
@@ -548,5 +726,5 @@ const verifyPayment = async (req, res) => {
 };
 
 
-const user_model = { getAllDataOfUser, signUpUser, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment };
+const user_model = { getAllDataOfUser, signUpUser, userLogin, videoAccess, buyVideo, createBuyOrderId, verifyPayment, getTransactionsData };
 export default user_model;
