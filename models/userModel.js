@@ -106,7 +106,7 @@ const getTransactionsData = async (req) => {
                 videosPipeline.exec()
             ]);
 
-            console.log(`✅ Redis updated with ${coinTransactions.length} coin + ${videoTransactions.length} video transactions`);
+            console.log(`Redis updated with ${coinTransactions.length} coin + ${videoTransactions.length} video transactions`);
         }
 
         const today = new Date();
@@ -163,16 +163,16 @@ const getTransactionsData = async (req) => {
             redisClient.zCard(videosRedisKey)
         ]);
 
-        // ✅ Check if more data exists for each type
+        // Check if more data exists for each type
         const nextEndDate = new Date(today);
         nextEndDate.setDate(today.getDate() - ((offset + 1) * limit) + 1);
 
         const nextStartDate = new Date(nextEndDate);
         nextStartDate.setDate(nextEndDate.getDate() - limit);
 
-        console.log(`📅 Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
+        console.log(`Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
 
-        // ✅ Check if any transaction exists in next range
+        // Check if any transaction exists in next range
         const [hasMoreCoins, hasMoreVideos] = await Promise.all([
             // Count how many in next range
             redisClient.zCount(coinsRedisKey, nextStartDate.getTime(), nextEndDate.getTime() - 1),
@@ -251,7 +251,7 @@ const getMoreCoins = async (req, res) => {
         const startDate = new Date(endDate);
         startDate.setDate(endDate.getDate() - limit);
 
-        console.log(`📅 Coins Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
+        console.log(`Coins Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
 
         const startTimestamp = startDate.getTime();
         const endTimestamp = endDate.getTime();
@@ -283,7 +283,7 @@ const getMoreCoins = async (req, res) => {
         const nextStartDate = new Date(nextEndDate);
         nextStartDate.setDate(nextEndDate.getDate() - limit);
 
-        console.log(`📅 Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
+        console.log(`Checking next range: ${nextStartDate.toDateString()} to ${nextEndDate.toDateString()}`);
 
         const hasMoreCoins = await redisClient.zCount(
             coinsRedisKey,
@@ -347,7 +347,7 @@ const getMoreVideos = async (req, res) => {
         const startDate = new Date(endDate);
         startDate.setDate(endDate.getDate() - limit);
 
-        console.log(`📅 Videos Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
+        console.log(`Videos Date Range: ${startDate.toDateString()} to ${endDate.toDateString()}`);
 
         const startTimestamp = startDate.getTime();
         const endTimestamp = endDate.getTime();
